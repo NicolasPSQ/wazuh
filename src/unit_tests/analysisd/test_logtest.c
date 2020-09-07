@@ -36,6 +36,10 @@ char * w_logtest_generate_error_response(char * msg);
 int w_logtest_preprocessing_phase(Eventinfo * lf, cJSON * request);
 void w_logtest_decoding_phase(Eventinfo * lf, w_logtest_session_t * session);
 int w_logtest_rulesmatching_phase(Eventinfo * lf, w_logtest_session_t * session, OSList * list_msg);
+cJSON *w_logtest_process_log(cJSON * request, w_logtest_session_t * session, OSList * list_msg);
+int w_logtest_process_request_remove_session(cJSON * json_request, cJSON * json_response, OSList * list_msg,
+                                             w_logtest_connection_t * connection);
+void * w_logtest_clients_handler(w_logtest_connection_t * connection);
 
 int logtest_enabled = 1;
 
@@ -54,7 +58,7 @@ int __wrap_OS_BindUnixDomain(const char *path, int type, int max_msg_size) {
 }
 
 int __wrap_accept(int __fd, __SOCKADDR_ARG __addr, socklen_t *__restrict __addr_len) {
-    return mock();
+    return mock_type(int);
 }
 
 void __wrap__merror(const char * file, int line, const char * func, const char *msg, ...) {
@@ -406,6 +410,14 @@ int __wrap_IGnore(Eventinfo *lf, int pos) {
 
 void * __wrap_OSList_AddData(OSList *list, void *data) {
     return mock_type(void *);
+}
+
+int __wrap_OS_RecvSecureTCP(int sock, char * ret,uint32_t size) {
+       return mock_type(int);
+}
+
+int __wrap_OS_SendSecureTCP(int sock, uint32_t size, const void * msg) {
+    return mock_type(int);
 }
 
 /* tests */
@@ -3301,6 +3313,374 @@ void test_w_logtest_rulesmatching_phase_match_and_group_prev_matched(void ** sta
     os_free(ruleinfo.group_prev_matched);
 }
 
+void test_w_logtest_process_log_preprocessing_fail(void ** state)
+{
+    Config.decoder_order_size = 1;
+
+    cJSON request = {0};
+    cJSON json_event = {0};
+    char * raw_event = strdup("event");
+    char * str_location = strdup("location");
+
+    w_logtest_session_t session = {0};
+    OSList list_msg = {0};
+
+    
+    cJSON * retval;
+
+    will_return(__wrap_cJSON_GetObjectItem, &json_event);
+    will_return(__wrap_cJSON_GetStringValue, raw_event);
+    
+    will_return(__wrap_cJSON_GetObjectItem, (cJSON *) 1);
+    will_return(__wrap_cJSON_GetStringValue, str_location);
+
+    will_return(__wrap_OS_CleanMSG, -1);
+
+
+    retval = w_logtest_process_log(&request, &session, &list_msg);
+    
+    assert_null(retval);
+
+    os_free(str_location);
+    os_free(raw_event);
+
+}
+
+// w_logtest_process_request_remove_session
+void test_w_logtest_process_request_remove_session_invalid_token(void ** state)
+{
+    cJSON * json_request = (cJSON *) 1;
+    cJSON * json_response = (cJSON *) 2;
+    OSList list_msg = {0};
+    w_logtest_connection_t connection = {0};
+    connection.active_client = 5;
+
+    const int expect_retval = W_LOGTEST_RCODE_ERROR_PROCESS;
+    int retval;
+
+    will_return(__wrap_cJSON_GetObjectItemCaseSensitive, NULL);
+
+    expect_string(__wrap__mdebug1, formatted_msg, "(7316): Failure to remove session. remove_session JSON field must be a string");
+
+    expect_value(__wrap__os_analysisd_add_logmsg, level, LOGLEVEL_ERROR);
+    expect_value(__wrap__os_analysisd_add_logmsg, list, NULL);
+    expect_string(__wrap__os_analysisd_add_logmsg, formatted_msg, "(7316): Failure to remove session. remove_session JSON field must be a string");
+
+
+    /*w_logtest_add_msg_response error*/
+    os_analysisd_log_msg_t * message;
+    os_calloc(1, sizeof(os_analysisd_log_msg_t), message);
+    message->level = LOGLEVEL_ERROR;
+    message->msg = strdup("Test Message");
+    message->file = NULL;
+    message->func = NULL;
+    OSListNode * list_msg_node;
+    os_calloc(1, sizeof(OSListNode), list_msg_node);
+    list_msg_node->data = message;
+    list_msg.cur_node = list_msg_node;
+
+    will_return(__wrap_OSList_GetFirstNode, list_msg_node);
+    will_return(__wrap_cJSON_GetObjectItemCaseSensitive, (cJSON*) 1);
+
+    will_return(__wrap_os_analysisd_string_log_msg, strdup("Test Message"));
+
+    expect_string(__wrap_wm_strcat, str2, "ERROR: ");
+    will_return(__wrap_wm_strcat, 0);
+
+    expect_string(__wrap_wm_strcat, str2, "Test Message");
+    will_return(__wrap_wm_strcat, 0);
+
+    will_return(__wrap_cJSON_CreateString, (cJSON *) 1);
+
+    will_return(__wrap_OSList_GetFirstNode, NULL);
+
+
+    retval = w_logtest_process_request_remove_session(json_request, json_response, NULL, &connection);
+
+    assert_int_equal(retval, expect_retval);
+    assert_int_equal(connection.active_client, 5);
+    
+    os_free(list_msg_node);
+}
+
+void test_w_logtest_process_request_remove_session_session_not_found(void ** state)
+{
+    cJSON * json_request = (cJSON *) 1;
+    cJSON * json_response = (cJSON *) 2;
+    OSList list_msg = {0};
+    w_logtest_connection_t connection = {0};
+    connection.active_client = 5;
+
+    cJSON token = {0};
+    token.valuestring = "000015b3";
+
+    const int expect_retval = W_LOGTEST_RCODE_ERROR_PROCESS;
+    int retval;
+
+    will_return(__wrap_cJSON_GetObjectItemCaseSensitive, &token);
+
+    will_return(__wrap_pthread_mutex_lock, 0);
+    expect_string(__wrap_OSHash_Get_ex, key, "000015b3");
+    will_return(__wrap_OSHash_Get_ex, NULL);
+
+
+    expect_string(__wrap__mdebug1, formatted_msg, "(7004): No session found for token '000015b3'");
+
+    expect_value(__wrap__os_analysisd_add_logmsg, level, LOGLEVEL_ERROR);
+    expect_value(__wrap__os_analysisd_add_logmsg, list, NULL);
+    expect_string(__wrap__os_analysisd_add_logmsg, formatted_msg, "(7004): No session found for token '000015b3'");
+
+    will_return(__wrap_pthread_mutex_unlock, 0);
+
+    /*w_logtest_add_msg_response error*/
+    os_analysisd_log_msg_t * message;
+    os_calloc(1, sizeof(os_analysisd_log_msg_t), message);
+    message->level = LOGLEVEL_ERROR;
+    message->msg = strdup("Test Message");
+    message->file = NULL;
+    message->func = NULL;
+    OSListNode * list_msg_node;
+    os_calloc(1, sizeof(OSListNode), list_msg_node);
+    list_msg_node->data = message;
+    list_msg.cur_node = list_msg_node;
+
+    will_return(__wrap_OSList_GetFirstNode, list_msg_node);
+    will_return(__wrap_cJSON_GetObjectItemCaseSensitive, (cJSON*) 1);
+
+    will_return(__wrap_os_analysisd_string_log_msg, strdup("Test Message"));
+
+    expect_string(__wrap_wm_strcat, str2, "ERROR: ");
+    will_return(__wrap_wm_strcat, 0);
+
+    expect_string(__wrap_wm_strcat, str2, "Test Message");
+    will_return(__wrap_wm_strcat, 0);
+
+    will_return(__wrap_cJSON_CreateString, (cJSON *) 1);
+
+    will_return(__wrap_OSList_GetFirstNode, NULL);
+
+
+    retval = w_logtest_process_request_remove_session(json_request, json_response, NULL, &connection);
+
+    assert_int_equal(retval, expect_retval);
+    assert_int_equal(connection.active_client, 5);
+    os_free(list_msg_node);
+}
+
+void test_w_logtest_process_request_remove_session_ok(void ** state)
+{
+    cJSON * json_request = (cJSON *) 1;
+    cJSON * json_response = (cJSON *) 2;
+    OSList list_msg = {0};
+    w_logtest_connection_t connection = {0};
+    connection.active_client = 5;
+
+    cJSON token = {0};
+    token.valuestring = "000015b3";
+
+    w_logtest_session_t *session;
+    os_calloc(1, sizeof(w_logtest_session_t), session);
+
+    const int expect_retval = W_LOGTEST_RCODE_SUCCESS;
+    int retval;
+
+    will_return(__wrap_cJSON_GetObjectItemCaseSensitive, &token);
+
+    will_return(__wrap_pthread_mutex_lock, 0);
+    expect_string(__wrap_OSHash_Get_ex, key, "000015b3");
+    will_return(__wrap_OSHash_Get_ex, session);
+
+    // remove session ok
+
+    expect_value(__wrap_OSHash_Delete_ex, key, "000015b3");
+    will_return(__wrap_OSHash_Delete_ex, session);
+
+    will_return(__wrap_OSStore_Free, session->decoder_store);
+
+    will_return(__wrap_OSHash_Free, session);
+
+    will_return(__wrap_OSHash_Free, session);
+
+    will_return(__wrap_OSHash_Free, session);
+
+    will_return(__wrap_pthread_mutex_destroy, 0);
+
+    expect_value(__wrap__os_analysisd_add_logmsg, level, LOGLEVEL_INFO);
+    expect_value(__wrap__os_analysisd_add_logmsg, list, NULL);
+    expect_string(__wrap__os_analysisd_add_logmsg, formatted_msg, "(7206): The session '000015b3' was closed successfully");
+
+    will_return(__wrap_pthread_mutex_unlock, 0);
+
+    /*w_logtest_add_msg_response error*/
+    os_analysisd_log_msg_t * message;
+    os_calloc(1, sizeof(os_analysisd_log_msg_t), message);
+    message->level = LOGLEVEL_INFO;
+    message->msg = strdup("Test Message");
+    message->file = NULL;
+    message->func = NULL;
+    OSListNode * list_msg_node;
+    os_calloc(1, sizeof(OSListNode), list_msg_node);
+    list_msg_node->data = message;
+    list_msg.cur_node = list_msg_node;
+
+    will_return(__wrap_OSList_GetFirstNode, list_msg_node);
+    will_return(__wrap_cJSON_GetObjectItemCaseSensitive, (cJSON*) 1);
+
+    will_return(__wrap_os_analysisd_string_log_msg, strdup("Test Message"));
+
+    expect_string(__wrap_wm_strcat, str2, "INFO: ");
+    will_return(__wrap_wm_strcat, 0);
+
+    expect_string(__wrap_wm_strcat, str2, "Test Message");
+    will_return(__wrap_wm_strcat, 0);
+
+    will_return(__wrap_cJSON_CreateString, (cJSON *) 1);
+
+    will_return(__wrap_OSList_GetFirstNode, NULL);
+
+
+    retval = w_logtest_process_request_remove_session(json_request, json_response, NULL, &connection);
+
+    assert_int_equal(retval, expect_retval);
+    assert_int_equal(connection.active_client, 4);
+
+    os_free(list_msg_node);
+}
+
+void test_w_logtest_clients_handler_error_acept(void ** state)
+{
+    w_logtest_connection_t conection = {0};
+    char expected_str[OS_SIZE_1024];
+
+    will_return(__wrap_FOREVER, 1);
+    
+    will_return(__wrap_pthread_mutex_lock, 0);
+
+    will_return(__wrap_accept, -1);
+    
+    will_return(__wrap_pthread_mutex_unlock, 0);
+    errno = ENOMEM;
+    snprintf(expected_str, OS_SIZE_1024, "(7301): Failure to accept connection. Errno: %s", strerror(errno));
+
+    expect_string(__wrap__merror, formatted_msg, expected_str);
+
+    will_return(__wrap_FOREVER, 0);
+
+    assert_null(w_logtest_clients_handler(&conection));
+
+}
+
+void test_w_logtest_clients_handler_error_acept_close_socket(void ** state)
+{
+    w_logtest_connection_t conection = {0};
+    char expected_str[OS_SIZE_1024];
+
+    will_return(__wrap_FOREVER, 1);
+    
+    will_return(__wrap_pthread_mutex_lock, 0);
+
+    will_return(__wrap_accept, -1);
+    
+    will_return(__wrap_pthread_mutex_unlock, 0);
+    errno = EBADF;
+    snprintf(expected_str, OS_SIZE_1024, "(7301): Failure to accept connection. Errno: %s", strerror(errno));
+
+    expect_string(__wrap__merror, formatted_msg, expected_str);
+
+    assert_null(w_logtest_clients_handler(&conection));
+
+}
+
+void test_w_logtest_clients_handler_recv_error(void ** state)
+{
+    w_logtest_connection_t conection = {0};
+    char expected_str[OS_SIZE_1024];
+
+    will_return(__wrap_FOREVER, 1);
+    
+    will_return(__wrap_pthread_mutex_lock, 0);
+
+    will_return(__wrap_accept, 5);
+    
+    will_return(__wrap_pthread_mutex_unlock, 0);
+
+    will_return(__wrap_OS_RecvSecureTCP, -1);
+    errno = ENOTCONN;
+    snprintf(expected_str, OS_SIZE_1024, "(7302): Failure to receive message: Errno: %s", strerror(ENOTCONN));
+
+    expect_string(__wrap__mdebug1, formatted_msg, expected_str);
+
+    will_return(__wrap_close, 0);
+    will_return(__wrap_FOREVER, 0);
+
+
+    assert_null(w_logtest_clients_handler(&conection));
+
+}
+
+void test_w_logtest_clients_handler_recv_msg_empty(void ** state)
+{
+    w_logtest_connection_t conection = {0};
+
+    will_return(__wrap_FOREVER, 1);
+    
+    will_return(__wrap_pthread_mutex_lock, 0);
+
+    will_return(__wrap_accept, 5);
+    
+    will_return(__wrap_pthread_mutex_unlock, 0);
+
+    will_return(__wrap_OS_RecvSecureTCP, 0);
+
+    expect_string(__wrap__mdebug1, formatted_msg, "(7314): Failure to receive message: empty or reception timeout");
+
+    will_return(__wrap_close, 0);
+    will_return(__wrap_FOREVER, 0);
+
+
+    assert_null(w_logtest_clients_handler(&conection));
+
+}
+
+void test_w_logtest_clients_handler_recv_msg_oversize(void ** state)
+{
+    w_logtest_connection_t conection = {0};
+
+    will_return(__wrap_FOREVER, 1);
+    
+    will_return(__wrap_pthread_mutex_lock, 0);
+
+    will_return(__wrap_accept, 5);
+    
+    will_return(__wrap_pthread_mutex_unlock, 0);
+
+    will_return(__wrap_OS_RecvSecureTCP, -6);
+
+    expect_string(__wrap__mdebug1, formatted_msg, "(7315): Failure to receive message: size is bigger than expected");
+
+    // w_logtest_generate_error_response
+    cJSON response = {0};
+    will_return(__wrap_cJSON_CreateObject, &response);
+    will_return(__wrap_cJSON_CreateArray, (cJSON *) 1);
+    will_return(__wrap_cJSON_CreateString, (cJSON *) 1);
+
+    expect_value(__wrap_cJSON_AddItemToObject, object, &response);
+    expect_string(__wrap_cJSON_AddItemToObject, string, "messages");
+
+    expect_string(__wrap_cJSON_AddNumberToObject, name, "codemsg");
+    expect_value(__wrap_cJSON_AddNumberToObject, number, -2);
+    will_return(__wrap_cJSON_AddNumberToObject, NULL);
+
+    will_return(__wrap_cJSON_PrintUnformatted, strdup("{json response}"));
+    will_return(__wrap_OS_SendSecureTCP, 0);
+
+    will_return(__wrap_close, 0);
+    will_return(__wrap_FOREVER, 0);
+
+
+    assert_null(w_logtest_clients_handler(&conection));
+
+}
 
 int main(void)
 {
@@ -3382,7 +3762,6 @@ int main(void)
         // cmocka_unit_test(test_w_logtest_process_request_error_get_session),
         // Tests w_logtest_generate_error_response
         cmocka_unit_test(test_w_logtest_generate_error_response_ok),
-        // Tests w_logtest_process_log
         // Tests w_logtest_preprocessing_phase
         cmocka_unit_test(test_w_logtest_preprocessing_phase_json_event_ok),
         cmocka_unit_test(test_w_logtest_preprocessing_phase_json_event_fail),
@@ -3405,6 +3784,22 @@ int main(void)
         cmocka_unit_test(test_w_logtest_rulesmatching_phase_match_and_if_matched_sid_fail),
         cmocka_unit_test(test_w_logtest_rulesmatching_phase_match_and_group_prev_matched),
         cmocka_unit_test(test_w_logtest_rulesmatching_phase_match_and_group_prev_matched_fail),
+        // Tests w_logtest_process_log
+        //cmocka_unit_test(test_w_logtest_process_log_preprocessing_fail),
+        //cmocka_unit_test(test_w_logtest_process_log_rule_match_fail),
+        //cmocka_unit_test(test_w_logtest_process_log_rule_dont_match),
+        //cmocka_unit_test(test_w_logtest_process_log_rule_match),
+        // Tests w_logtest_process_request_remove_session
+        cmocka_unit_test(test_w_logtest_process_request_remove_session_invalid_token),
+        cmocka_unit_test(test_w_logtest_process_request_remove_session_session_not_found),
+        cmocka_unit_test(test_w_logtest_process_request_remove_session_ok),
+        // Tests w_logtest_clients_handler
+        cmocka_unit_test(test_w_logtest_clients_handler_error_acept),
+        cmocka_unit_test(test_w_logtest_clients_handler_error_acept_close_socket),
+        cmocka_unit_test(test_w_logtest_clients_handler_recv_error),
+        cmocka_unit_test(test_w_logtest_clients_handler_recv_msg_empty),
+        cmocka_unit_test(test_w_logtest_clients_handler_recv_msg_oversize),
+        //cmocka_unit_test(test_w_logtest_clients_handler_ok),
 
 
 
