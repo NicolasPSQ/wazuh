@@ -153,8 +153,8 @@ static int teardown_fim_data(void **state) {
 
     free(fim_data->item);
     free_whodata_event(fim_data->w_evt);
-    free_entry_data(fim_data->new_data);
-    free_entry_data(fim_data->old_data);
+    free_file_data(fim_data->new_data);
+    free_file_data(fim_data->old_data);
     free(fim_data);
 
     return 0;
@@ -258,7 +258,7 @@ static int teardown_fim_entry(void **state) {
 static int teardown_local_data(void **state) {
     fim_data_t *fim_data = *state;
 
-    free_entry_data(fim_data->local_data);
+    free_file_data(fim_data->local_data);
     return 0;
 }
 
@@ -1936,18 +1936,18 @@ static void test_fim_scan_db_full_double_scan(void **state) {
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
-    will_return(__wrap_fim_db_get_count_entry_path, 45000);
+    will_return(__wrap_fim_db_get_count_file_entry, 45000);
 
     expect_string(__wrap_HasFilesystem, path, "/boot");
 
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
 
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mwarn, formatted_msg, "(6927): Sending DB 100% full alert.");
     expect_string(__wrap_send_log_msg, msg, "wazuh: FIM DB: {\"file_limit\":50000,\"file_count\":50000,\"alert_type\":\"full\"}");
@@ -1998,7 +1998,7 @@ static void test_fim_scan_no_realtime(void **state) {
 
     will_return_count(__wrap_HasFilesystem, 0, 6);
 
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_value(__wrap_fim_db_get_not_scanned, fim_sql, syscheck.database);
     expect_value(__wrap_fim_db_get_not_scanned, storage, FIM_DB_DISK);
@@ -2008,7 +2008,7 @@ static void test_fim_scan_no_realtime(void **state) {
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
 
@@ -2069,11 +2069,11 @@ static void test_fim_scan_db_full_not_double_scan(void **state) {
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
 
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_function_call(__wrap_count_watches);
     will_return(__wrap_count_watches, 6);
@@ -2146,12 +2146,12 @@ static void test_fim_scan_realtime_enabled(void **state) {
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     // fim_scan
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
 
     // fim_check_db_state
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     // fim_scan
     expect_function_call(__wrap_count_watches);
@@ -2209,7 +2209,7 @@ static void test_fim_scan_db_free(void **state) {
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     // fim_scan
-    will_return(__wrap_fim_db_get_count_entry_path, 1000);
+    will_return(__wrap_fim_db_get_count_file_entry, 1000);
 
     expect_any_count(__wrap_lstat, filename, 6);
     will_return_count(__wrap_lstat, 0, 6);
@@ -2223,14 +2223,14 @@ static void test_fim_scan_db_free(void **state) {
     expect_string(__wrap_HasFilesystem, path, "/usr/sbin");
     will_return_count(__wrap_HasFilesystem, 0, 6);
 
-    will_return_count(__wrap_fim_db_get_count_entry_path, 1000, 6);
+    will_return_count(__wrap_fim_db_get_count_file_entry, 1000, 6);
 
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
 
-    will_return(__wrap_fim_db_get_count_entry_path, 1000);
+    will_return(__wrap_fim_db_get_count_file_entry, 1000);
 
     expect_string(__wrap__minfo, formatted_msg, "(6038): Sending DB back to normal alert.");
     expect_string(__wrap_send_log_msg, msg, "wazuh: FIM DB: {\"file_limit\":50000,\"file_count\":1000,\"alert_type\":\"normal\"}");
@@ -2790,17 +2790,17 @@ static void test_fim_scan_db_full_double_scan(void **state) {
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     // In fim_scan
-    will_return(__wrap_fim_db_get_count_entry_path, 45000);
+    will_return(__wrap_fim_db_get_count_file_entry, 45000);
 
     expect_string(__wrap_HasFilesystem, path, expanded_dirs[0]);
 
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mwarn, formatted_msg, "(6927): Sending DB 100% full alert.");
     expect_string(__wrap_send_log_msg, msg, "wazuh: FIM DB: {\"file_limit\":50000,\"file_count\":50000,\"alert_type\":\"full\"}");
@@ -2865,7 +2865,7 @@ static void test_fim_scan_db_full_double_scan_winreg_check(void **state) {
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     // fim_scan
-    will_return(__wrap_fim_db_get_count_entry_path, 45000);
+    will_return(__wrap_fim_db_get_count_file_entry, 45000);
 
     expect_any_count(__wrap_stat, __file, 10);
 
@@ -2875,13 +2875,13 @@ static void test_fim_scan_db_full_double_scan_winreg_check(void **state) {
 
     will_return_count(__wrap_HasFilesystem, 0, 10);
 
-    will_return_count(__wrap_fim_db_get_count_entry_path, 45000, 11);
+    will_return_count(__wrap_fim_db_get_count_file_entry, 45000, 11);
 
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
-    will_return(__wrap_fim_db_get_count_entry_path, 45000);
+    will_return(__wrap_fim_db_get_count_file_entry, 45000);
 
     expect_string(__wrap__minfo, formatted_msg, "(6039): Sending DB 80% full alert.");
     expect_string(__wrap_send_log_msg, msg, "wazuh: FIM DB: {\"file_limit\":50000,\"file_count\":45000,\"alert_type\":\"80_percentage\"}");
@@ -2950,10 +2950,10 @@ static void test_fim_scan_db_full_not_double_scan(void **state) {
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     // fim_scan
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6345): Folders monitored with real-time engine: 0");
 
@@ -3016,7 +3016,7 @@ static void test_fim_scan_db_free(void **state) {
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     // fim_scan
-    will_return(__wrap_fim_db_get_count_entry_path, 1000);
+    will_return(__wrap_fim_db_get_count_file_entry, 1000);
 
     // In fim_checker
     expect_any_count(__wrap_stat, __file, 10);
@@ -3032,14 +3032,14 @@ static void test_fim_scan_db_free(void **state) {
     will_return_count(__wrap_HasFilesystem, 0, 10);
 
     // fim_scan
-    will_return_count(__wrap_fim_db_get_count_entry_path, 1000, 11);
+    will_return_count(__wrap_fim_db_get_count_file_entry, 1000, 11);
 
     expect_value(__wrap_fim_db_set_all_unscanned, fim_sql, syscheck.database);
     will_return(__wrap_fim_db_set_all_unscanned, 0);
 
     expect_string(__wrap__mdebug2, formatted_msg, "(6342): Maximum number of files to be monitored: '50000'");
 
-    will_return(__wrap_fim_db_get_count_entry_path, 1000);
+    will_return(__wrap_fim_db_get_count_file_entry, 1000);
 
     expect_string(__wrap__minfo, formatted_msg, "(6038): Sending DB back to normal alert.");
     expect_string(__wrap_send_log_msg, msg, "wazuh: FIM DB: {\"file_limit\":50000,\"file_count\":1000,\"alert_type\":\"normal\"}");
@@ -3120,7 +3120,7 @@ static void test_fim_check_db_state_normal_to_empty(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 0);
+    will_return(__wrap_fim_db_get_count_file_entry, 0);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3136,7 +3136,7 @@ static void test_fim_check_db_state_empty_to_empty(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 0);
+    will_return(__wrap_fim_db_get_count_file_entry, 0);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3152,7 +3152,7 @@ static void test_fim_check_db_state_empty_to_full(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3172,7 +3172,7 @@ static void test_fim_check_db_state_full_to_empty(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 0);
+    will_return(__wrap_fim_db_get_count_file_entry, 0);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3192,7 +3192,7 @@ static void test_fim_check_db_state_empty_to_90_percentage(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 46000);
+    will_return(__wrap_fim_db_get_count_file_entry, 46000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3212,7 +3212,7 @@ static void test_fim_check_db_state_90_percentage_to_empty(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 0);
+    will_return(__wrap_fim_db_get_count_file_entry, 0);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3232,7 +3232,7 @@ static void test_fim_check_db_state_empty_to_80_percentage(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 41000);
+    will_return(__wrap_fim_db_get_count_file_entry, 41000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3252,7 +3252,7 @@ static void test_fim_check_db_state_80_percentage_to_empty(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 0);
+    will_return(__wrap_fim_db_get_count_file_entry, 0);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3272,7 +3272,7 @@ static void test_fim_check_db_state_empty_to_normal(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 10000);
+    will_return(__wrap_fim_db_get_count_file_entry, 10000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3288,7 +3288,7 @@ static void test_fim_check_db_state_normal_to_normal(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 20000);
+    will_return(__wrap_fim_db_get_count_file_entry, 20000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3304,7 +3304,7 @@ static void test_fim_check_db_state_normal_to_full(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3324,7 +3324,7 @@ static void test_fim_check_db_state_full_to_normal(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 10000);
+    will_return(__wrap_fim_db_get_count_file_entry, 10000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3344,7 +3344,7 @@ static void test_fim_check_db_state_normal_to_90_percentage(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 46000);
+    will_return(__wrap_fim_db_get_count_file_entry, 46000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3364,7 +3364,7 @@ static void test_fim_check_db_state_90_percentage_to_normal(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 10000);
+    will_return(__wrap_fim_db_get_count_file_entry, 10000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3384,7 +3384,7 @@ static void test_fim_check_db_state_normal_to_80_percentage(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 41000);
+    will_return(__wrap_fim_db_get_count_file_entry, 41000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3404,7 +3404,7 @@ static void test_fim_check_db_state_80_percentage_to_80_percentage(void **state)
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 42000);
+    will_return(__wrap_fim_db_get_count_file_entry, 42000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3420,7 +3420,7 @@ static void test_fim_check_db_state_80_percentage_to_full(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3440,7 +3440,7 @@ static void test_fim_check_db_state_full_to_80_percentage(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 41000);
+    will_return(__wrap_fim_db_get_count_file_entry, 41000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3460,7 +3460,7 @@ static void test_fim_check_db_state_80_percentage_to_90_percentage(void **state)
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 46000);
+    will_return(__wrap_fim_db_get_count_file_entry, 46000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3480,7 +3480,7 @@ static void test_fim_check_db_state_90_percentage_to_90_percentage(void **state)
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 48000);
+    will_return(__wrap_fim_db_get_count_file_entry, 48000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3496,7 +3496,7 @@ static void test_fim_check_db_state_90_percentage_to_full(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 50000);
+    will_return(__wrap_fim_db_get_count_file_entry, 50000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3516,7 +3516,7 @@ static void test_fim_check_db_state_full_to_full(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 60000);
+    will_return(__wrap_fim_db_get_count_file_entry, 60000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3532,7 +3532,7 @@ static void test_fim_check_db_state_full_to_90_percentage(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 46000);
+    will_return(__wrap_fim_db_get_count_file_entry, 46000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3552,7 +3552,7 @@ static void test_fim_check_db_state_90_percentage_to_80_percentage(void **state)
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 41000);
+    will_return(__wrap_fim_db_get_count_file_entry, 41000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -3572,7 +3572,7 @@ static void test_fim_check_db_state_80_percentage_to_normal(void **state) {
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_lock);
 #endif
-    will_return(__wrap_fim_db_get_count_entry_path, 10000);
+    will_return(__wrap_fim_db_get_count_file_entry, 10000);
 #ifdef TEST_WINAGENT
     expect_function_call(__wrap_pthread_mutex_unlock);
 #endif
@@ -4185,7 +4185,7 @@ static void test_fim_process_missing_entry_failure(void **state) {
     free(file);
 }
 
-static void test_fim_process_missing_entry_data_exists(void **state) {
+static void test_fim_process_missing_file_data_exists(void **state) {
 
     fim_data_t *fim_data = *state;
 
@@ -4518,7 +4518,7 @@ int main(void) {
         /* fim_process_missing_entry */
         cmocka_unit_test(test_fim_process_missing_entry_no_data),
         cmocka_unit_test(test_fim_process_missing_entry_failure),
-        cmocka_unit_test_setup(test_fim_process_missing_entry_data_exists, setup_fim_entry),
+        cmocka_unit_test_setup(test_fim_process_missing_file_data_exists, setup_fim_entry),
 
         /* fim_diff_folder_size */
         cmocka_unit_test(test_fim_diff_folder_size),
